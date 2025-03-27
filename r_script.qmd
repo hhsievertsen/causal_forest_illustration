@@ -1,0 +1,245 @@
+---
+title: "Causal Forest illustration for M"
+---
+
+# Preparations
+
+There is randomness involved. We set seed.
+
+```{r}
+set.seed(1909)
+```
+
+
+We now load the libraries to use
+
+```{r}
+library("modelsummary")  # For summary stat tables
+library("readstata13")   # For loading Stata files (can also use haven)
+library("ggplot2")       # For charts
+library("grf")           # Generalized Random Forests
+library("DiagrammeR")    # Plot trees
+library("dplyr")         # Data manipulation tools
+library("policytree")    # Get optimal policy
+library("fastDummies")              # To create dummies
+```
+
+# Example data
+
+Let us load the example data from Stata into the dataframe called df.
+
+```{r}
+df<-read.dta13("statadata.dta")
+
+```
+
+Let us have a look at the data
+```{r}
+datasummary_skim(df)
+```
+
+
+# OLS heterogeneity as a comparison
+
+We are interested in the effect of Treatment on y and whether it varies by Native, Schooling, and Female. We do that by simply conditioning on these samples. 
+
+
+```{r, echo=FALSE}
+
+models <- list(
+  "All"       = lm(y ~ Treatment, data = df),
+  "Female"    = lm(y ~ Treatment, data = df[df$female==1,]),
+  "Female & \n Native"  = lm(y ~ Treatment, data = df[df$female==1&df$native==1,]),
+  "Female & \n Non-Native"  = lm(y ~ Treatment, data = df[df$female==1&df$native==0,]),
+  "Male & \n Schooling<13"  = lm(y ~ Treatment, data = df[df$female==1&df$par_sch<13,])
+)
+modelsummary(models, gof_map = c("nobs", "r.squared"),
+      title = 'OLS Regression results',output = "flextable",stars=TRUE)
+```
+
+
+The average treatment effect is basically zero, but it clearly conceals substantial heterogeneity. Looking only at the subsample of females does not help us much, but if condition on female and native we observe significant effects! But how do we proceed? Even with only three variables (female, native, schooling), there are way too many combinations we could test and we would run into small sample issues. 
+
+
+# Causal forest!
+
+So let us now try the causal forest approach to identify treatment effect hetereogeneity. The intuition is the following.
+
+## Intuition
+
+##### Step 1: grow a heterogeneity tree
+
+
+1. Find first **best split**: think of doing the table above and find the sample split by one single variable that gives the biggest difference in treatment effects (or most homogeneous treatment effect groups). Once you have split the sample by that variable, continue in the next level. 
+
+2.  Find the best split in the next level. For each sub sample split the sample again. 
+
+3. **Continue** until no good split possible.
+
+
+##### Step 2: grow a forest
+
+
+4. Consider a **random sample** of **observations** and **variables**.
+
+5. Build new heterogeneity tree based on the randomly selected variables on the random sample as described above.
+
+6. Draw a new sample and build a new tree.
+
+
+## Implementation
+
+We can use `causal_forest()` from the library *grf* to grow our forest. We need to input the data as matrices:
+
+- X: the variables used to describe heterogeneity
+- W: the treatment variable
+- y: the outcome variable
+
+### Estimate forest
+
+```{r,echo=TRUE,out.width="100%",cache=TRUE}
+# Load the Stata data and create matrices
+df<-read.dta13("statadata.dta")
+y=as.matrix(df["y"])
+W=as.matrix(df["Treatment"])
+X=as.matrix(df[c("female","par_inc","par_sch",
+                 "native","female")])
+
+# Fit casual forest
+cf<-causal_forest(X=X,Y=y,W=W)
+# Add predictions to the 
+df<-cbind(df,cate=predict(cf)$predictions)
+head(df)
+
+```
+
+So we have created our first forest. The first thing we did is to create predictions. That is what we call CATE (conditional average treatment effect). That is, for every individual we have their individual predicted treatment effect. That is obtained by averaging across trees we grew. 
+
+### Plot tree
+
+We can plot one of the trees, but the intuitive value of an individual tree within the forest is limited. It is also typically super complex!
+
+```{r}
+plot(tree <- get_tree(cf, 1))
+```
+
+
+
+### Gooness of fit
+
+We can test how good the fit is by running a regression of the individually estimated treatment effect on the average treatment effect and the predicted deviations. Given they are obtained with leave out approaches, they are not mechanically related. If the coeffiecient on both the mean and the differential is 1 it it indicates that the model captures heterogeneity well (and there is significant heterogeneity). If the point estimate on the  differential is not significantly different from 0 it is either that the causal forest is not a good fit or there is no heterogeneity. 
+
+```{r}
+
+test_calibration(cf)
+```
+
+
+### Distribution of treatment effects
+
+We can have a look at the distribution of the raw treatment effects
+```{r,echo=TRUE,out.width="80%",cache=TRUE,echo=FALSE}
+# Show data
+ggplot(df,aes(x=cate))+
+  geom_histogram(color="white",bins=75)+
+  theme_minimal()
+```
+
+There is clearly substantial treatment effect heterogeneity as the CATE goes from less than -1 to more than 1. We can now try to characterize the this variation, but before that, we will have a look at the doubly robust estimates of the treatment effect.
+
+### Doubly robust treatment effect 
+
+We get this with the function `average_treatment_effect()`. It basically reweights the CATEs to give us a doubly robust estimate. It is not a big deal here, but it can make a real difference.
+
+```{r}
+ average_treatment_effect(cf)
+```
+
+### Describe the treatment effect heterogeneity
+
+There are many things you can do to describe the heterogeneity. For example look athe covariates of those with large CATEs and compare them to those with small CATEs. Here I compare top 20% to bottom 20%.
+
+```{r,echo=FALSE }
+df$ntile <- factor(ntile(predict(cf)$predictions, n=5))
+datasummary_balance(~Quintile,
+                    data = df%>%select(cate,female,par_inc,par_sch,native,female,ntile)%>%filter(ntile%in%c(1,5))%>%
+                      mutate(Quintile=ifelse(ntile==1,"First","Fifth"))%>%select(-ntile),
+                    title = "Differences across groups based on CATEs",
+                    fmt= '%.2f', output = "flextable",
+                    dinm_statistic = "p.value")
+
+
+```
+
+
+### Optimal policy
+
+We can also use the CATEs to get the optimal policy. Who should get the treatment to maximize benefits?
+
+
+```{r}
+Gamma.matrix <- double_robust_scores(cf)
+tree_full<-policy_tree(X, Gamma.matrix, depth = 2) 
+# print policy
+plot(tree_full)
+```
+
+So we would treat native females and males with low schooling. 
+
+# Identification
+
+In the example above i implicitly assumed unconfoundedness. For example based on an RCT. We can also use the approach with quasi-experimental methods. A basic idea is to first residualize treatment and outcomes and then use the residualized variables in a causal forest. 
+
+## Mimicking a two-way FE DiD approach
+
+We add some  fixed effects to the data frame (that do not make a difference, but just as an illustration). So here let us say we have some state and year fixed effects:
+
+
+```{r}
+# Create FE
+df$fe_state<-sample(1:50,replace = TRUE, nrow(df))
+df$fe_year<-sample(2010:2020,replace = TRUE, nrow(df))
+# Make them dummies
+df_dummies<-dummy_cols(df,select_columns="fe_state" )
+df_dummies<-dummy_cols(df_dummies,select_columns="fe_year" )
+```
+
+We now first residualize the variables
+
+```{r}
+X_orth = as.matrix(df_dummies%>%select(starts_with("fe_"),-fe_state,-fe_year))
+Y.forest = regression_forest(X_orth, y)
+Y.hat = predict(Y.forest )$predictions
+W.forest = regression_forest(X_orth, W)
+W.hat = predict(W.forest )$predictions
+```   
+
+And we then estimate the causal forest and do everything as above, except that we feed in the predictions. 
+
+
+```{r,echo=TRUE,out.width="100%",cache=TRUE}
+
+cf<-causal_forest(X=X,Y=y,W=W,Y.hat = Y.hat, W.hat = W.hat)
+ average_treatment_effect(cf)
+```
+
+
+# Things to consider
+
+- I was silent about common support, but ideally you want to show some sort of common support of treated and control across all values of all variables.
+
+- Tuning: there are lots of parameters that can be adjusted and set manually. Like the number of trees. The stopping rules etc. We can explicitly state that we want to tune them (cross validation) and have a look at the settings. The settings are stored in tuning.output
+
+```{r,echo=TRUE,out.width="100%",cache=TRUE}
+
+cf<-causal_forest(X=X,Y=y,W=W,Y.hat = Y.hat, W.hat = W.hat,tune.parameters = "all",)
+cf$tuning.output$params       
+```
+
+- In the residualization above I use a regression forest on a lot of dummies. In principle you could use OLS (but avoid perfect predictions). It also worth noting that dummies are very inefficient in these forests, because they do not include a lot of information considering how many values they add. It might be better to use some kind of sufficient representation (like adding means of all covariates by the levels of the fixed effect). 
+
+- Where to find more: Most of the above is from the Susan Athey lectures here https://www.aeaweb.org/conference/cont-ed/2018-webcasts where she also covers IV estimation.
+
+- Note that trees are honest. We use one part of the sample to get the tree structure, one part to get the actual estimates and the last part is the one where we apply the treatment effect on to get the CATE.
+
+

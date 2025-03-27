@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.3.433">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>Causal Forest illustration for M</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="r_script_files/libs/clipboard/clipboard.min.js"></script>
+<script src="r_script_files/libs/quarto-html/quarto.js"></script>
+<script src="r_script_files/libs/quarto-html/popper.min.js"></script>
+<script src="r_script_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="r_script_files/libs/quarto-html/anchor.min.js"></script>
+<link href="r_script_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="r_script_files/libs/quarto-html/quarto-syntax-highlighting.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="r_script_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="r_script_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="r_script_files/libs/bootstrap/bootstrap.min.css" rel="stylesheet" id="quarto-bootstrap" data-mode="light">
+<link href="r_script_files/libs/tabwid-1.1.3/tabwid.css" rel="stylesheet">
+<script src="r_script_files/libs/tabwid-1.1.3/tabwid.js"></script>
+<link href="r_script_files/libs/htmltools-fill-0.5.8.1/fill.css" rel="stylesheet">
+<script src="r_script_files/libs/htmlwidgets-1.6.4/htmlwidgets.js"></script>
+<script src="r_script_files/libs/viz-1.8.2/viz.js"></script>
+<link href="r_script_files/libs/DiagrammeR-styles-0.2/styles.css" rel="stylesheet">
+<script src="r_script_files/libs/grViz-binding-1.0.11/grViz.js"></script>
+
+
+</head>
+
+<body class="fullcontent">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Causal Forest illustration for M</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+</header>
+
+<section id="preparations" class="level1">
+<h1>Preparations</h1>
+<p>There is randomness involved. We set seed.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">1909</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>We now load the libraries to use</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(<span class="st">"modelsummary"</span>)  <span class="co"># For summary stat tables</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(<span class="st">"readstata13"</span>)   <span class="co"># For loading Stata files (can also use haven)</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(<span class="st">"ggplot2"</span>)       <span class="co"># For charts</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(<span class="st">"grf"</span>)           <span class="co"># Generalized Random Forests</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(<span class="st">"DiagrammeR"</span>)    <span class="co"># Plot trees</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(<span class="st">"dplyr"</span>)         <span class="co"># Data manipulation tools</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>
+Attaching package: 'dplyr'</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>The following objects are masked from 'package:stats':
+
+    filter, lag</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>The following objects are masked from 'package:base':
+
+    intersect, setdiff, setequal, union</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(<span class="st">"policytree"</span>)    <span class="co"># Get optimal policy</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(<span class="st">"fastDummies"</span>)              <span class="co"># To create dummies</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="example-data" class="level1">
+<h1>Example data</h1>
+<p>Let us load the example data from Stata into the dataframe called df.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>df<span class="ot">&lt;-</span><span class="fu">read.dta13</span>(<span class="st">"statadata.dta"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Let us have a look at the data</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="fu">datasummary_skim</span>(df)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+
+<!-- preamble start -->
+
+    <script>
+
+      function styleCell_qxef02dmk9s7ezar6pkk(i, j, css_id) {
+          var table = document.getElementById("tinytable_qxef02dmk9s7ezar6pkk");
+          var cell = table.rows[i]?.cells[j];  // Safe navigation to avoid errors
+          if (cell) {
+              console.log(`Styling cell at (${i}, ${j}) with class ${css_id}`);
+              cell.classList.add(css_id);
+          } else {
+              console.warn(`Cell at (${i}, ${j}) not found.`);
+          }
+      }
+      function insertSpanRow(i, colspan, content) {
+        var table = document.getElementById('tinytable_qxef02dmk9s7ezar6pkk');
+        var newRow = table.insertRow(i);
+        var newCell = newRow.insertCell(0);
+        newCell.setAttribute("colspan", colspan);
+        // newCell.innerText = content;
+        // this may be unsafe, but innerText does not interpret <br>
+        newCell.innerHTML = content;
+      }
+      function spanCell_qxef02dmk9s7ezar6pkk(i, j, rowspan, colspan) {
+        var table = document.getElementById("tinytable_qxef02dmk9s7ezar6pkk");
+        const targetRow = table.rows[i];
+        const targetCell = targetRow.cells[j];
+        for (let r = 0; r < rowspan; r++) {
+          // Only start deleting cells to the right for the first row (r == 0)
+          if (r === 0) {
+            // Delete cells to the right of the target cell in the first row
+            for (let c = colspan - 1; c > 0; c--) {
+              if (table.rows[i + r].cells[j + c]) {
+                table.rows[i + r].deleteCell(j + c);
+              }
+            }
+          }
+          // For rows below the first, delete starting from the target column
+          if (r > 0) {
+            for (let c = colspan - 1; c >= 0; c--) {
+              if (table.rows[i + r] && table.rows[i + r].cells[j]) {
+                table.rows[i + r].deleteCell(j);
+              }
+            }
+          }
+        }
+        // Set rowspan and colspan of the target cell
+        targetCell.rowSpan = rowspan;
+        targetCell.colSpan = colspan;
+      }
+      // tinytable span after
+      window.addEventListener('load', function () {
+          var cellsToStyle = [
+            // tinytable style arrays after
+          { positions: [ { i: 7, j: 0 }, { i: 7, j: 7 }, { i: 7, j: 5 }, { i: 7, j: 2 }, { i: 7, j: 1 }, { i: 7, j: 6 }, { i: 7, j: 4 }, { i: 7, j: 3 }, { i: 7, j: 8 },  ], css_id: 'tinytable_css_sjov7ezhpg5qij7axjnl',}, 
+          { positions: [ { i: 2, j: 0 }, { i: 5, j: 0 }, { i: 2, j: 1 }, { i: 4, j: 2 }, { i: 5, j: 1 }, { i: 1, j: 0 }, { i: 4, j: 3 }, { i: 3, j: 0 }, { i: 4, j: 0 }, { i: 2, j: 2 }, { i: 6, j: 0 }, { i: 1, j: 4 }, { i: 5, j: 2 }, { i: 1, j: 1 }, { i: 4, j: 4 }, { i: 3, j: 1 }, { i: 4, j: 1 }, { i: 2, j: 3 }, { i: 6, j: 1 }, { i: 1, j: 5 }, { i: 5, j: 3 }, { i: 1, j: 2 }, { i: 4, j: 5 }, { i: 3, j: 2 }, { i: 6, j: 5 }, { i: 2, j: 4 }, { i: 6, j: 2 }, { i: 1, j: 6 }, { i: 5, j: 4 }, { i: 1, j: 3 }, { i: 4, j: 6 }, { i: 3, j: 3 }, { i: 6, j: 6 }, { i: 2, j: 5 }, { i: 6, j: 3 }, { i: 1, j: 7 }, { i: 5, j: 5 }, { i: 3, j: 7 }, { i: 4, j: 7 }, { i: 3, j: 4 }, { i: 6, j: 7 }, { i: 2, j: 6 }, { i: 6, j: 4 }, { i: 1, j: 8 }, { i: 5, j: 6 }, { i: 3, j: 8 }, { i: 4, j: 8 }, { i: 3, j: 5 }, { i: 6, j: 8 }, { i: 2, j: 7 }, { i: 3, j: 6 }, { i: 5, j: 7 }, { i: 2, j: 8 }, { i: 5, j: 8 },  ], css_id: 'tinytable_css_lsa46tdz9jp6pzd24isj',}, 
+          { positions: [ { i: 0, j: 0 }, { i: 0, j: 5 }, { i: 0, j: 4 }, { i: 0, j: 2 }, { i: 0, j: 7 }, { i: 0, j: 6 }, { i: 0, j: 3 }, { i: 0, j: 1 }, { i: 0, j: 8 },  ], css_id: 'tinytable_css_zioe88yfkpp3k5mha3tn',}, 
+          ];
+
+          // Loop over the arrays to style the cells
+          cellsToStyle.forEach(function (group) {
+              group.positions.forEach(function (cell) {
+                  styleCell_qxef02dmk9s7ezar6pkk(cell.i, cell.j, group.css_id);
+              });
+          });
+      });
+    </script>
+
+    <style>
+      /* tinytable css entries after */
+      .table td.tinytable_css_sjov7ezhpg5qij7axjnl, .table th.tinytable_css_sjov7ezhpg5qij7axjnl { text-align: left; border-bottom: solid #d3d8dc 0.1em; }
+      .table td.tinytable_css_lsa46tdz9jp6pzd24isj, .table th.tinytable_css_lsa46tdz9jp6pzd24isj { text-align: left; }
+      .table td.tinytable_css_zioe88yfkpp3k5mha3tn, .table th.tinytable_css_zioe88yfkpp3k5mha3tn { text-align: left; border-top: solid #d3d8dc 0.1em; border-bottom: solid #d3d8dc 0.05em; }
+    </style>
+    <div class="container">
+      <table class="table table-borderless" id="tinytable_qxef02dmk9s7ezar6pkk" style="width: auto; margin-left: auto; margin-right: auto;" data-quarto-disable-processing="true">
+        <thead>
+        
+              <tr>
+                <th scope="col"> </th>
+                <th scope="col">Unique</th>
+                <th scope="col">Missing Pct.</th>
+                <th scope="col">Mean</th>
+                <th scope="col">SD</th>
+                <th scope="col">Min</th>
+                <th scope="col">Median</th>
+                <th scope="col">Max</th>
+                <th scope="col">Histogram</th>
+              </tr>
+        </thead>
+        
+        <tbody>
+                <tr>
+                  <td>height</td>
+                  <td>39</td>
+                  <td>0</td>
+                  <td>170.1</td>
+                  <td>5.0</td>
+                  <td>150.0</td>
+                  <td>170.0</td>
+                  <td>189.0</td>
+                  <td><img src="./tinytable_assets/idn4slie0ga1vzi6mvmrf6.png" style="height: 1em;"></td>
+                </tr>
+                <tr>
+                  <td>par_inc</td>
+                  <td>10000</td>
+                  <td>0</td>
+                  <td>751398.6</td>
+                  <td>1016906.2</td>
+                  <td>14674.5</td>
+                  <td>445576.4</td>
+                  <td>24008444.2</td>
+                  <td><img src="./tinytable_assets/idw155tintteyuampixe18.png" style="height: 1em;"></td>
+                </tr>
+                <tr>
+                  <td>par_sch</td>
+                  <td>13</td>
+                  <td>0</td>
+                  <td>14.1</td>
+                  <td>2.8</td>
+                  <td>9.0</td>
+                  <td>14.0</td>
+                  <td>21.0</td>
+                  <td><img src="./tinytable_assets/idxmd3pvxhft6l6k93t1ks.png" style="height: 1em;"></td>
+                </tr>
+                <tr>
+                  <td>native</td>
+                  <td>2</td>
+                  <td>0</td>
+                  <td>0.5</td>
+                  <td>0.5</td>
+                  <td>0.0</td>
+                  <td>0.0</td>
+                  <td>1.0</td>
+                  <td><img src="./tinytable_assets/idxe5n2acowm35wrs1jncn.png" style="height: 1em;"></td>
+                </tr>
+                <tr>
+                  <td>female</td>
+                  <td>2</td>
+                  <td>0</td>
+                  <td>0.5</td>
+                  <td>0.5</td>
+                  <td>0.0</td>
+                  <td>1.0</td>
+                  <td>1.0</td>
+                  <td><img src="./tinytable_assets/idjx2x3p7zgi5dkhcsx67e.png" style="height: 1em;"></td>
+                </tr>
+                <tr>
+                  <td>Treatment</td>
+                  <td>2</td>
+                  <td>0</td>
+                  <td>0.5</td>
+                  <td>0.5</td>
+                  <td>0.0</td>
+                  <td>0.0</td>
+                  <td>1.0</td>
+                  <td><img src="./tinytable_assets/idbprwqkxv2ccvcljygpv8.png" style="height: 1em;"></td>
+                </tr>
+                <tr>
+                  <td>y</td>
+                  <td>10000</td>
+                  <td>0</td>
+                  <td>0.5</td>
+                  <td>2.0</td>
+                  <td>-12.3</td>
+                  <td>0.5</td>
+                  <td>10.9</td>
+                  <td><img src="./tinytable_assets/idjxmfudnp7hoykjvzgaab.png" style="height: 1em;"></td>
+                </tr>
+        </tbody>
+      </table>
+    </div>
+<!-- hack to avoid NA insertion in last line -->
+</div>
+</div>
+</section>
+<section id="ols-heterogeneity-as-a-comparison" class="level1">
+<h1>OLS heterogeneity as a comparison</h1>
+<p>We are interested in the effect of Treatment on y and whether it varies by Native, Schooling, and Female. We do that by simply conditioning on these samples.</p>
+<div class="cell">
+<div class="cell-output-display">
+
+<div class="tabwid"><style>.cl-3891808e{}.cl-388da81a{font-family:'Helvetica';font-size:11pt;font-weight:normal;font-style:normal;text-decoration:none;color:rgba(0, 0, 0, 1.00);background-color:transparent;}.cl-388f4a58{margin:0;text-align:left;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);padding-bottom:5pt;padding-top:5pt;padding-left:5pt;padding-right:5pt;line-height: 1;background-color:transparent;}.cl-388f58ea{width:0.75in;background-color:transparent;vertical-align: middle;border-bottom: 1.5pt solid rgba(102, 102, 102, 1.00);border-top: 1.5pt solid rgba(102, 102, 102, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-388f58f4{width:0.75in;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-388f58f5{width:0.75in;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 1pt solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-388f58f6{width:0.75in;background-color:transparent;vertical-align: middle;border-bottom: 1.5pt solid rgba(102, 102, 102, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-388f58fe{width:0.75in;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(255, 255, 255, 0.00);border-top: 0 solid rgba(255, 255, 255, 0.00);border-left: 0 solid rgba(255, 255, 255, 0.00);border-right: 0 solid rgba(255, 255, 255, 0.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}</style><table data-quarto-disable-processing="true" class="cl-3891808e"><thead><tr style="overflow-wrap:break-word;"><th class="cl-388f58ea"><p class="cl-388f4a58"><span class="cl-388da81a"> </span></p></th><th class="cl-388f58ea"><p class="cl-388f4a58"><span class="cl-388da81a">All</span></p></th><th class="cl-388f58ea"><p class="cl-388f4a58"><span class="cl-388da81a">Female</span></p></th><th class="cl-388f58ea"><p class="cl-388f4a58"><span class="cl-388da81a">Female &amp; </span><br><span class="cl-388da81a"> Native</span></p></th><th class="cl-388f58ea"><p class="cl-388f4a58"><span class="cl-388da81a">Female &amp; </span><br><span class="cl-388da81a"> Non-Native</span></p></th><th class="cl-388f58ea"><p class="cl-388f4a58"><span class="cl-388da81a">Male &amp; </span><br><span class="cl-388da81a"> Schooling&lt;13</span></p></th></tr></thead><tbody><tr style="overflow-wrap:break-word;"><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">(Intercept)</span></p></td><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">0.509***</span></p></td><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">0.521***</span></p></td><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">0.508***</span></p></td><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">0.534***</span></p></td><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">0.541***</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a"></span></p></td><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">(0.028)</span></p></td><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">(0.041)</span></p></td><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">(0.050)</span></p></td><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">(0.065)</span></p></td><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">(0.066)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">Treatment</span></p></td><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">-0.052</span></p></td><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">-0.070</span></p></td><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">0.279***</span></p></td><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">-0.410***</span></p></td><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">0.975***</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a"></span></p></td><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">(0.040)</span></p></td><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">(0.058)</span></p></td><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">(0.070)</span></p></td><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">(0.091)</span></p></td><td class="cl-388f58f4"><p class="cl-388f4a58"><span class="cl-388da81a">(0.091)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-388f58f5"><p class="cl-388f4a58"><span class="cl-388da81a">Num.Obs.</span></p></td><td class="cl-388f58f5"><p class="cl-388f4a58"><span class="cl-388da81a">10000</span></p></td><td class="cl-388f58f5"><p class="cl-388f4a58"><span class="cl-388da81a">5043</span></p></td><td class="cl-388f58f5"><p class="cl-388f4a58"><span class="cl-388da81a">2498</span></p></td><td class="cl-388f58f5"><p class="cl-388f4a58"><span class="cl-388da81a">2545</span></p></td><td class="cl-388f58f5"><p class="cl-388f4a58"><span class="cl-388da81a">1513</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-388f58f6"><p class="cl-388f4a58"><span class="cl-388da81a">R2</span></p></td><td class="cl-388f58f6"><p class="cl-388f4a58"><span class="cl-388da81a">0.000</span></p></td><td class="cl-388f58f6"><p class="cl-388f4a58"><span class="cl-388da81a">0.000</span></p></td><td class="cl-388f58f6"><p class="cl-388f4a58"><span class="cl-388da81a">0.006</span></p></td><td class="cl-388f58f6"><p class="cl-388f4a58"><span class="cl-388da81a">0.008</span></p></td><td class="cl-388f58f6"><p class="cl-388f4a58"><span class="cl-388da81a">0.070</span></p></td></tr></tbody><tfoot><tr style="overflow-wrap:break-word;"><td colspan="6" class="cl-388f58fe"><p class="cl-388f4a58"><span class="cl-388da81a">+ p &lt; 0.1, * p &lt; 0.05, ** p &lt; 0.01, *** p &lt; 0.001</span></p></td></tr></tfoot></table></div>
+</div>
+</div>
+<p>The average treatment effect is basically zero, but it clearly conceals substantial heterogeneity. Looking only at the subsample of females does not help us much, but if condition on female and native we observe significant effects! But how do we proceed? Even with only three variables (female, native, schooling), there are way too many combinations we could test and we would run into small sample issues.</p>
+</section>
+<section id="causal-forest" class="level1">
+<h1>Causal forest!</h1>
+<p>So let us now try the causal forest approach to identify treatment effect hetereogeneity. The intuition is the following.</p>
+<section id="intuition" class="level2">
+<h2 class="anchored" data-anchor-id="intuition">Intuition</h2>
+<section id="step-1-grow-a-heterogeneity-tree" class="level5">
+<h5 class="anchored" data-anchor-id="step-1-grow-a-heterogeneity-tree">Step 1: grow a heterogeneity tree</h5>
+<ol type="1">
+<li><p>Find first <strong>best split</strong>: think of doing the table above and find the sample split by one single variable that gives the biggest difference in treatment effects (or most homogeneous treatment effect groups). Once you have split the sample by that variable, continue in the next level.</p></li>
+<li><p>Find the best split in the next level. For each sub sample split the sample again.</p></li>
+<li><p><strong>Continue</strong> until no good split possible.</p></li>
+</ol>
+</section>
+<section id="step-2-grow-a-forest" class="level5">
+<h5 class="anchored" data-anchor-id="step-2-grow-a-forest">Step 2: grow a forest</h5>
+<ol start="4" type="1">
+<li><p>Consider a <strong>random sample</strong> of <strong>observations</strong> and <strong>variables</strong>.</p></li>
+<li><p>Build new heterogeneity tree based on the randomly selected variables on the random sample as described above.</p></li>
+<li><p>Draw a new sample and build a new tree.</p></li>
+</ol>
+</section>
+</section>
+<section id="implementation" class="level2">
+<h2 class="anchored" data-anchor-id="implementation">Implementation</h2>
+<p>We can use <code>causal_forest()</code> from the library <em>grf</em> to grow our forest. We need to input the data as matrices:</p>
+<ul>
+<li>X: the variables used to describe heterogeneity</li>
+<li>W: the treatment variable</li>
+<li>y: the outcome variable</li>
+</ul>
+<section id="estimate-forest" class="level3">
+<h3 class="anchored" data-anchor-id="estimate-forest">Estimate forest</h3>
+<div class="cell" data-hash="r_script_cache/html/unnamed-chunk-6_a21c3c6a62f9bfa48ddf783679b7d904">
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Load the Stata data and create matrices</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>df<span class="ot">&lt;-</span><span class="fu">read.dta13</span>(<span class="st">"statadata.dta"</span>)</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>y<span class="ot">=</span><span class="fu">as.matrix</span>(df[<span class="st">"y"</span>])</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>W<span class="ot">=</span><span class="fu">as.matrix</span>(df[<span class="st">"Treatment"</span>])</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>X<span class="ot">=</span><span class="fu">as.matrix</span>(df[<span class="fu">c</span>(<span class="st">"female"</span>,<span class="st">"par_inc"</span>,<span class="st">"par_sch"</span>,</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>                 <span class="st">"native"</span>,<span class="st">"female"</span>)])</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Fit casual forest</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>cf<span class="ot">&lt;-</span><span class="fu">causal_forest</span>(<span class="at">X=</span>X,<span class="at">Y=</span>y,<span class="at">W=</span>W)</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Add predictions to the </span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>df<span class="ot">&lt;-</span><span class="fu">cbind</span>(df,<span class="at">cate=</span><span class="fu">predict</span>(cf)<span class="sc">$</span>predictions)</span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a><span class="fu">head</span>(df)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>  height  par_inc par_sch native female Treatment          y        cate
+1    167 947604.4      14      1      1         0  1.5456093 -0.13760727
+2    175 360515.9      13      1      0         0  1.0585249  0.03340571
+3    167 110618.2      17      0      1         1  1.6175557 -0.97268829
+4    174 751425.2      10      1      0         0  0.3506790 -0.46218278
+5    166 335868.5      16      1      1         1 -0.7075752 -0.25516813
+6    172 102374.2      17      1      0         1  1.2181895  1.89382925</code></pre>
+</div>
+</div>
+<p>So we have created our first forest. The first thing we did is to create predictions. That is what we call CATE (conditional average treatment effect). That is, for every individual we have their individual predicted treatment effect. That is obtained by averaging across trees we grew.</p>
+</section>
+<section id="plot-tree" class="level3">
+<h3 class="anchored" data-anchor-id="plot-tree">Plot tree</h3>
+<p>We can plot one of the trees, but the intuitive value of an individual tree within the forest is limited. It is also typically super complex!</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(tree <span class="ot">&lt;-</span> <span class="fu">get_tree</span>(cf, <span class="dv">1</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div class="grViz html-widget html-fill-item" id="htmlwidget-4b291d99899060308dcf" style="width:100%;height:464px;"></div>
+<script type="application/json" data-for="htmlwidget-4b291d99899060308dcf">{"x":{"diagram":"digraph nodes { \n node [shape=box] ;\n0 [label=\" native <= 0 \"] ;\n0 -> 1 [labeldistance=2.5, labelangle=45, headlabel=\"True\", arrowhead=normal];\n0 -> 2 [labeldistance=2.5, labelangle=-45, headlabel=\"False\", arrowhead=normal];\n1 [label=\" par_sch <= 12 \"] ;\n1 -> 3 [ arrowhead=normal];\n1 -> 4 [ arrowhead=normal];\n3 [label=\" female.1 <= 0 \"] ;\n3 -> 7 [ arrowhead=normal];\n3 -> 8 [ arrowhead=normal];\n7 [label=\" par_sch <= 10 \"] ;\n7 -> 15 [ arrowhead=normal];\n7 -> 16 [ arrowhead=normal];\n15 [label=\" par_inc <= 1324971.69 \"] ;\n15 -> 31 [ arrowhead=normal];\n15 -> 32 [ arrowhead=normal];\n31  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  61 \n avg_Y = 0.35\navg_W = 0.46 \"];\n32  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  12 \n avg_Y = 0.73\navg_W = 0.5 \"];\n16  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  117 \n avg_Y = 0.43\navg_W = 0.49 \"];\n8 [label=\" par_inc <= 98839.78 \"] ;\n8 -> 17 [ arrowhead=normal];\n8 -> 18 [ arrowhead=normal];\n17  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  8 \n avg_Y = 0.66\navg_W = 0.38 \"];\n18  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  182 \n avg_Y = 1.01\navg_W = 0.55 \"];\n4 [label=\" par_inc <= 92771.75 \"] ;\n4 -> 9 [ arrowhead=normal];\n4 -> 10 [ arrowhead=normal];\n9 [label=\" female <= 0 \"] ;\n9 -> 19 [ arrowhead=normal];\n9 -> 20 [ arrowhead=normal];\n19  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  23 \n avg_Y = -0.61\navg_W = 0.48 \"];\n20  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  21 \n avg_Y = 0.61\navg_W = 0.48 \"];\n10 [label=\" par_inc <= 166675.42 \"] ;\n10 -> 21 [ arrowhead=normal];\n10 -> 22 [ arrowhead=normal];\n21 [label=\" par_sch <= 13 \"] ;\n21 -> 33 [ arrowhead=normal];\n21 -> 34 [ arrowhead=normal];\n33  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  17 \n avg_Y = 0.05\navg_W = 0.65 \"];\n34 [label=\" par_inc <= 140298.82 \"] ;\n34 -> 49 [ arrowhead=normal];\n34 -> 50 [ arrowhead=normal];\n49 [label=\" par_inc <= 127093.39 \"] ;\n49 -> 77 [ arrowhead=normal];\n49 -> 78 [ arrowhead=normal];\n77 [label=\" female.1 <= 0 \"] ;\n77 -> 113 [ arrowhead=normal];\n77 -> 114 [ arrowhead=normal];\n113  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  14 \n avg_Y = 0.29\navg_W = 0.43 \"];\n114  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  26 \n avg_Y = 0.21\navg_W = 0.46 \"];\n78  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  22 \n avg_Y = -0.23\navg_W = 0.45 \"];\n50 [label=\" par_sch <= 15 \"] ;\n50 -> 79 [ arrowhead=normal];\n50 -> 80 [ arrowhead=normal];\n79  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  7 \n avg_Y = -0.51\navg_W = 0.57 \"];\n80  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  19 \n avg_Y = -0.69\navg_W = 0.53 \"];\n22 [label=\" par_inc <= 210662.34 \"] ;\n22 -> 35 [ arrowhead=normal];\n22 -> 36 [ arrowhead=normal];\n35 [label=\" par_inc <= 190329.22 \"] ;\n35 -> 51 [ arrowhead=normal];\n35 -> 52 [ arrowhead=normal];\n51 [label=\" par_inc <= 182040.71 \"] ;\n51 -> 81 [ arrowhead=normal];\n51 -> 82 [ arrowhead=normal];\n81  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  19 \n avg_Y = -0.86\navg_W = 0.63 \"];\n82  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  14 \n avg_Y = -0.26\navg_W = 0.57 \"];\n52  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  34 \n avg_Y = -0.07\navg_W = 0.59 \"];\n36 [label=\" par_inc <= 334200.02 \"] ;\n36 -> 53 [ arrowhead=normal];\n36 -> 54 [ arrowhead=normal];\n53 [label=\" par_inc <= 313155.79 \"] ;\n53 -> 83 [ arrowhead=normal];\n53 -> 84 [ arrowhead=normal];\n83 [label=\" par_sch <= 18 \"] ;\n83 -> 115 [ arrowhead=normal];\n83 -> 116 [ arrowhead=normal];\n115 [label=\" par_inc <= 229057.11 \"] ;\n115 -> 155 [ arrowhead=normal];\n115 -> 156 [ arrowhead=normal];\n155  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  11 \n avg_Y = -0.34\navg_W = 0.45 \"];\n156 [label=\" par_inc <= 244701.09 \"] ;\n156 -> 173 [ arrowhead=normal];\n156 -> 174 [ arrowhead=normal];\n173 [label=\" par_inc <= 236986.86 \"] ;\n173 -> 191 [ arrowhead=normal];\n173 -> 192 [ arrowhead=normal];\n191  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  10 \n avg_Y = -0.59\navg_W = 0.6 \"];\n192  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  4 \n avg_Y = 0.04\navg_W = 0.75 \"];\n174 [label=\" par_inc <= 265220.91 \"] ;\n174 -> 193 [ arrowhead=normal];\n174 -> 194 [ arrowhead=normal];\n193 [label=\" par_inc <= 256184.79 \"] ;\n193 -> 215 [ arrowhead=normal];\n193 -> 216 [ arrowhead=normal];\n215  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  14 \n avg_Y = 0.9\navg_W = 0.21 \"];\n216  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  8 \n avg_Y = 0.14\navg_W = 0.25 \"];\n194 [label=\" par_inc <= 289552.86 \"] ;\n194 -> 217 [ arrowhead=normal];\n194 -> 218 [ arrowhead=normal];\n217 [label=\" par_inc <= 276750.22 \"] ;\n217 -> 229 [ arrowhead=normal];\n217 -> 230 [ arrowhead=normal];\n229  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  13 \n avg_Y = 0.05\navg_W = 0.38 \"];\n230  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  15 \n avg_Y = 0.09\navg_W = 0.33 \"];\n218 [label=\" female.1 <= 0 \"] ;\n218 -> 231 [ arrowhead=normal];\n218 -> 232 [ arrowhead=normal];\n231  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  8 \n avg_Y = -0.04\navg_W = 0.12 \"];\n232  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  8 \n avg_Y = 2.23\navg_W = 0.62 \"];\n116  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  11 \n avg_Y = 1.31\navg_W = 0.55 \"];\n84 [label=\" par_sch <= 15 \"] ;\n84 -> 117 [ arrowhead=normal];\n84 -> 118 [ arrowhead=normal];\n117  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  14 \n avg_Y = -0.37\navg_W = 0.36 \"];\n118  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  7 \n avg_Y = 1.03\navg_W = 0.29 \"];\n54 [label=\" par_inc <= 373552.98 \"] ;\n54 -> 85 [ arrowhead=normal];\n54 -> 86 [ arrowhead=normal];\n85 [label=\" par_sch <= 15 \"] ;\n85 -> 119 [ arrowhead=normal];\n85 -> 120 [ arrowhead=normal];\n119  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  21 \n avg_Y = 0.34\navg_W = 0.48 \"];\n120  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  12 \n avg_Y = 0.4\navg_W = 0.42 \"];\n86 [label=\" par_sch <= 17 \"] ;\n86 -> 121 [ arrowhead=normal];\n86 -> 122 [ arrowhead=normal];\n121 [label=\" par_sch <= 16 \"] ;\n121 -> 157 [ arrowhead=normal];\n121 -> 158 [ arrowhead=normal];\n157 [label=\" par_inc <= 450843.08 \"] ;\n157 -> 175 [ arrowhead=normal];\n157 -> 176 [ arrowhead=normal];\n175 [label=\" par_inc <= 417138.7 \"] ;\n175 -> 195 [ arrowhead=normal];\n175 -> 196 [ arrowhead=normal];\n195 [label=\" par_inc <= 400941.07 \"] ;\n195 -> 219 [ arrowhead=normal];\n195 -> 220 [ arrowhead=normal];\n219  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  24 \n avg_Y = 0.22\navg_W = 0.42 \"];\n220  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  9 \n avg_Y = -0.31\navg_W = 0.67 \"];\n196  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  16 \n avg_Y = -0.57\navg_W = 0.31 \"];\n176 [label=\" par_inc <= 496351.27 \"] ;\n176 -> 197 [ arrowhead=normal];\n176 -> 198 [ arrowhead=normal];\n197 [label=\" female.1 <= 0 \"] ;\n197 -> 221 [ arrowhead=normal];\n197 -> 222 [ arrowhead=normal];\n221  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  13 \n avg_Y = -0.08\navg_W = 0.31 \"];\n222  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  4 \n avg_Y = -1.14\navg_W = 1 \"];\n198 [label=\" par_inc <= 621725.15 \"] ;\n198 -> 223 [ arrowhead=normal];\n198 -> 224 [ arrowhead=normal];\n223  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  48 \n avg_Y = -0.21\navg_W = 0.6 \"];\n224 [label=\" par_inc <= 681500.56 \"] ;\n224 -> 233 [ arrowhead=normal];\n224 -> 234 [ arrowhead=normal];\n233  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  24 \n avg_Y = -0.47\navg_W = 0.67 \"];\n234 [label=\" par_inc <= 922044.96 \"] ;\n234 -> 235 [ arrowhead=normal];\n234 -> 236 [ arrowhead=normal];\n235 [label=\" par_sch <= 15 \"] ;\n235 -> 237 [ arrowhead=normal];\n235 -> 238 [ arrowhead=normal];\n237 [label=\" par_inc <= 814682.76 \"] ;\n237 -> 241 [ arrowhead=normal];\n237 -> 242 [ arrowhead=normal];\n241 [label=\" female.1 <= 0 \"] ;\n241 -> 247 [ arrowhead=normal];\n241 -> 248 [ arrowhead=normal];\n247  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  20 \n avg_Y = -0.34\navg_W = 0.35 \"];\n248  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  15 \n avg_Y = 0.65\navg_W = 0.47 \"];\n242  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  13 \n avg_Y = -1.19\navg_W = 0.38 \"];\n238  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  16 \n avg_Y = 0.54\navg_W = 0.38 \"];\n236 [label=\" par_inc <= 1304139.45 \"] ;\n236 -> 239 [ arrowhead=normal];\n236 -> 240 [ arrowhead=normal];\n239 [label=\" par_inc <= 1039893.23 \"] ;\n239 -> 243 [ arrowhead=normal];\n239 -> 244 [ arrowhead=normal];\n243  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  15 \n avg_Y = 0.3\navg_W = 0.47 \"];\n244 [label=\" par_inc <= 1171315.29 \"] ;\n244 -> 249 [ arrowhead=normal];\n244 -> 250 [ arrowhead=normal];\n249  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  22 \n avg_Y = -0.05\navg_W = 0.55 \"];\n250  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  15 \n avg_Y = -0.37\navg_W = 0.53 \"];\n240 [label=\" par_inc <= 1433471.35 \"] ;\n240 -> 245 [ arrowhead=normal];\n240 -> 246 [ arrowhead=normal];\n245  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  9 \n avg_Y = -0.04\navg_W = 0.56 \"];\n246 [label=\" par_inc <= 1657660.42 \"] ;\n246 -> 251 [ arrowhead=normal];\n246 -> 252 [ arrowhead=normal];\n251  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  18 \n avg_Y = -1.77\navg_W = 0.56 \"];\n252 [label=\" par_inc <= 1959213.98 \"] ;\n252 -> 253 [ arrowhead=normal];\n252 -> 254 [ arrowhead=normal];\n253  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  19 \n avg_Y = -1.56\navg_W = 0.68 \"];\n254 [label=\" par_inc <= 3885701.92 \"] ;\n254 -> 255 [ arrowhead=normal];\n254 -> 256 [ arrowhead=normal];\n255 [label=\" par_inc <= 2903110.42 \"] ;\n255 -> 257 [ arrowhead=normal];\n255 -> 258 [ arrowhead=normal];\n257 [label=\" par_inc <= 2276923.73 \"] ;\n257 -> 259 [ arrowhead=normal];\n257 -> 260 [ arrowhead=normal];\n259  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  14 \n avg_Y = 0.52\navg_W = 0.57 \"];\n260  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  10 \n avg_Y = -0.12\navg_W = 0.7 \"];\n258  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  3 \n avg_Y = -1.68\navg_W = 0.67 \"];\n256  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  15 \n avg_Y = 0.35\navg_W = 0.47 \"];\n158 [label=\" par_inc <= 573273.87 \"] ;\n158 -> 177 [ arrowhead=normal];\n158 -> 178 [ arrowhead=normal];\n177 [label=\" par_inc <= 436457.81 \"] ;\n177 -> 199 [ arrowhead=normal];\n177 -> 200 [ arrowhead=normal];\n199  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  9 \n avg_Y = -0.94\navg_W = 0.56 \"];\n200  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  11 \n avg_Y = -0.3\navg_W = 0.64 \"];\n178  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  49 \n avg_Y = 0.29\navg_W = 0.51 \"];\n122 [label=\" par_inc <= 540110.25 \"] ;\n122 -> 159 [ arrowhead=normal];\n122 -> 160 [ arrowhead=normal];\n159  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  17 \n avg_Y = 0.31\navg_W = 0.59 \"];\n160 [label=\" female.1 <= 0 \"] ;\n160 -> 179 [ arrowhead=normal];\n160 -> 180 [ arrowhead=normal];\n179 [label=\" par_inc <= 1463265.71 \"] ;\n179 -> 201 [ arrowhead=normal];\n179 -> 202 [ arrowhead=normal];\n201  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  22 \n avg_Y = -0.54\navg_W = 0.68 \"];\n202  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  10 \n avg_Y = -0.02\navg_W = 0.2 \"];\n180 [label=\" par_inc <= 930353.92 \"] ;\n180 -> 203 [ arrowhead=normal];\n180 -> 204 [ arrowhead=normal];\n203  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  25 \n avg_Y = -0.09\navg_W = 0.36 \"];\n204  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  13 \n avg_Y = -1.39\navg_W = 0.69 \"];\n2 [label=\" female.1 <= 0 \"] ;\n2 -> 5 [ arrowhead=normal];\n2 -> 6 [ arrowhead=normal];\n5 [label=\" par_sch <= 14 \"] ;\n5 -> 11 [ arrowhead=normal];\n5 -> 12 [ arrowhead=normal];\n11 [label=\" par_inc <= 149581.99 \"] ;\n11 -> 23 [ arrowhead=normal];\n11 -> 24 [ arrowhead=normal];\n23 [label=\" par_inc <= 102324.47 \"] ;\n23 -> 37 [ arrowhead=normal];\n23 -> 38 [ arrowhead=normal];\n37 [label=\" par_inc <= 63958.24 \"] ;\n37 -> 55 [ arrowhead=normal];\n37 -> 56 [ arrowhead=normal];\n55  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  17 \n avg_Y = 0.15\navg_W = 0.59 \"];\n56  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  20 \n avg_Y = 0.59\navg_W = 0.5 \"];\n38  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  25 \n avg_Y = 0.92\navg_W = 0.56 \"];\n24 [label=\" par_sch <= 13 \"] ;\n24 -> 39 [ arrowhead=normal];\n24 -> 40 [ arrowhead=normal];\n39 [label=\" par_inc <= 177209.2 \"] ;\n39 -> 57 [ arrowhead=normal];\n39 -> 58 [ arrowhead=normal];\n57  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  14 \n avg_Y = 0.24\navg_W = 0.36 \"];\n58 [label=\" par_sch <= 10 \"] ;\n58 -> 87 [ arrowhead=normal];\n58 -> 88 [ arrowhead=normal];\n87 [label=\" par_inc <= 943110.96 \"] ;\n87 -> 123 [ arrowhead=normal];\n87 -> 124 [ arrowhead=normal];\n123 [label=\" par_inc <= 520314.7 \"] ;\n123 -> 161 [ arrowhead=normal];\n123 -> 162 [ arrowhead=normal];\n161 [label=\" par_inc <= 309016.98 \"] ;\n161 -> 181 [ arrowhead=normal];\n161 -> 182 [ arrowhead=normal];\n181  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  10 \n avg_Y = 0.47\navg_W = 0.7 \"];\n182  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  13 \n avg_Y = -0.21\navg_W = 0.38 \"];\n162  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  16 \n avg_Y = -0.09\navg_W = 0.5 \"];\n124  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  13 \n avg_Y = -0.88\navg_W = 0.62 \"];\n88 [label=\" par_inc <= 563655.36 \"] ;\n88 -> 125 [ arrowhead=normal];\n88 -> 126 [ arrowhead=normal];\n125 [label=\" par_inc <= 424592.4 \"] ;\n125 -> 163 [ arrowhead=normal];\n125 -> 164 [ arrowhead=normal];\n163 [label=\" par_inc <= 250640.5 \"] ;\n163 -> 183 [ arrowhead=normal];\n163 -> 184 [ arrowhead=normal];\n183  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  23 \n avg_Y = 0.3\navg_W = 0.43 \"];\n184 [label=\" par_inc <= 315546.07 \"] ;\n184 -> 205 [ arrowhead=normal];\n184 -> 206 [ arrowhead=normal];\n205  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  13 \n avg_Y = 0.86\navg_W = 0.69 \"];\n206  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  30 \n avg_Y = 0.67\navg_W = 0.57 \"];\n164  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  15 \n avg_Y = -0.1\navg_W = 0.6 \"];\n126 [label=\" par_inc <= 633734.32 \"] ;\n126 -> 165 [ arrowhead=normal];\n126 -> 166 [ arrowhead=normal];\n165  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  5 \n avg_Y = 0.97\navg_W = 0.2 \"];\n166 [label=\" par_sch <= 12 \"] ;\n166 -> 185 [ arrowhead=normal];\n166 -> 186 [ arrowhead=normal];\n185 [label=\" par_inc <= 896184.71 \"] ;\n185 -> 207 [ arrowhead=normal];\n185 -> 208 [ arrowhead=normal];\n207  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  18 \n avg_Y = 0.19\navg_W = 0.22 \"];\n208 [label=\" par_inc <= 1306612.84 \"] ;\n208 -> 225 [ arrowhead=normal];\n208 -> 226 [ arrowhead=normal];\n225  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  13 \n avg_Y = -0.24\navg_W = 0.62 \"];\n226  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  18 \n avg_Y = 0.22\navg_W = 0.5 \"];\n186  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  38 \n avg_Y = 0.15\navg_W = 0.45 \"];\n40 [label=\" par_inc <= 341549.67 \"] ;\n40 -> 59 [ arrowhead=normal];\n40 -> 60 [ arrowhead=normal];\n59  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  17 \n avg_Y = 0.56\navg_W = 0.65 \"];\n60 [label=\" par_inc <= 808373.02 \"] ;\n60 -> 89 [ arrowhead=normal];\n60 -> 90 [ arrowhead=normal];\n89 [label=\" par_inc <= 566402.36 \"] ;\n89 -> 127 [ arrowhead=normal];\n89 -> 128 [ arrowhead=normal];\n127  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  17 \n avg_Y = 0.58\navg_W = 0.59 \"];\n128  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  7 \n avg_Y = -0.41\navg_W = 0.71 \"];\n90 [label=\" par_inc <= 1857761.14 \"] ;\n90 -> 129 [ arrowhead=normal];\n90 -> 130 [ arrowhead=normal];\n129  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  10 \n avg_Y = 0.99\navg_W = 0.5 \"];\n130  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  4 \n avg_Y = -0.11\navg_W = 0.5 \"];\n12 [label=\" par_inc <= 78386.87 \"] ;\n12 -> 25 [ arrowhead=normal];\n12 -> 26 [ arrowhead=normal];\n25  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  9 \n avg_Y = 0.97\navg_W = 0.44 \"];\n26 [label=\" par_inc <= 151126.24 \"] ;\n26 -> 41 [ arrowhead=normal];\n26 -> 42 [ arrowhead=normal];\n41 [label=\" par_inc <= 131269.05 \"] ;\n41 -> 61 [ arrowhead=normal];\n41 -> 62 [ arrowhead=normal];\n61  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  14 \n avg_Y = 1.12\navg_W = 0.5 \"];\n62  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  10 \n avg_Y = 0.97\navg_W = 0.2 \"];\n42 [label=\" par_sch <= 15 \"] ;\n42 -> 63 [ arrowhead=normal];\n42 -> 64 [ arrowhead=normal];\n63 [label=\" par_inc <= 1083551.67 \"] ;\n63 -> 91 [ arrowhead=normal];\n63 -> 92 [ arrowhead=normal];\n91 [label=\" par_inc <= 472281.31 \"] ;\n91 -> 131 [ arrowhead=normal];\n91 -> 132 [ arrowhead=normal];\n131  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  34 \n avg_Y = 1.06\navg_W = 0.65 \"];\n132  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  31 \n avg_Y = 1.13\navg_W = 0.42 \"];\n92  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  10 \n avg_Y = 0.87\navg_W = 0.3 \"];\n64 [label=\" par_sch <= 16 \"] ;\n64 -> 93 [ arrowhead=normal];\n64 -> 94 [ arrowhead=normal];\n93  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  72 \n avg_Y = 1.78\navg_W = 0.54 \"];\n94 [label=\" par_inc <= 628474.31 \"] ;\n94 -> 133 [ arrowhead=normal];\n94 -> 134 [ arrowhead=normal];\n133 [label=\" par_inc <= 258297.94 \"] ;\n133 -> 167 [ arrowhead=normal];\n133 -> 168 [ arrowhead=normal];\n167  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  18 \n avg_Y = 1.48\navg_W = 0.33 \"];\n168 [label=\" par_inc <= 358328.55 \"] ;\n168 -> 187 [ arrowhead=normal];\n168 -> 188 [ arrowhead=normal];\n187  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  18 \n avg_Y = 1.59\navg_W = 0.44 \"];\n188 [label=\" par_sch <= 17 \"] ;\n188 -> 209 [ arrowhead=normal];\n188 -> 210 [ arrowhead=normal];\n209  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  5 \n avg_Y = 0.89\navg_W = 0.8 \"];\n210  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  17 \n avg_Y = 1.45\navg_W = 0.41 \"];\n134 [label=\" par_inc <= 752645.82 \"] ;\n134 -> 169 [ arrowhead=normal];\n134 -> 170 [ arrowhead=normal];\n169  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  9 \n avg_Y = 2.04\navg_W = 0.44 \"];\n170  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  38 \n avg_Y = 1.4\navg_W = 0.61 \"];\n6 [label=\" par_sch <= 13 \"] ;\n6 -> 13 [ arrowhead=normal];\n6 -> 14 [ arrowhead=normal];\n13 [label=\" par_inc <= 109795.89 \"] ;\n13 -> 27 [ arrowhead=normal];\n13 -> 28 [ arrowhead=normal];\n27  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  22 \n avg_Y = 1.74\navg_W = 0.59 \"];\n28 [label=\" par_sch <= 10 \"] ;\n28 -> 43 [ arrowhead=normal];\n28 -> 44 [ arrowhead=normal];\n43 [label=\" par_sch <= 9 \"] ;\n43 -> 65 [ arrowhead=normal];\n43 -> 66 [ arrowhead=normal];\n65 [label=\" par_inc <= 481480.77 \"] ;\n65 -> 95 [ arrowhead=normal];\n65 -> 96 [ arrowhead=normal];\n95  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  23 \n avg_Y = 1.29\navg_W = 0.61 \"];\n96  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  12 \n avg_Y = 1.13\navg_W = 0.67 \"];\n66 [label=\" par_inc <= 927663.09 \"] ;\n66 -> 97 [ arrowhead=normal];\n66 -> 98 [ arrowhead=normal];\n97 [label=\" par_inc <= 457054.76 \"] ;\n97 -> 135 [ arrowhead=normal];\n97 -> 136 [ arrowhead=normal];\n135  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  12 \n avg_Y = 0.67\navg_W = 0.58 \"];\n136  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  9 \n avg_Y = 0.8\navg_W = 0.56 \"];\n98  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  4 \n avg_Y = -0.42\navg_W = 0.5 \"];\n44 [label=\" par_sch <= 12 \"] ;\n44 -> 67 [ arrowhead=normal];\n44 -> 68 [ arrowhead=normal];\n67 [label=\" par_inc <= 1633715.79 \"] ;\n67 -> 99 [ arrowhead=normal];\n67 -> 100 [ arrowhead=normal];\n99 [label=\" par_inc <= 814790.79 \"] ;\n99 -> 137 [ arrowhead=normal];\n99 -> 138 [ arrowhead=normal];\n137 [label=\" par_inc <= 613462.46 \"] ;\n137 -> 171 [ arrowhead=normal];\n137 -> 172 [ arrowhead=normal];\n171 [label=\" par_inc <= 287812.12 \"] ;\n171 -> 189 [ arrowhead=normal];\n171 -> 190 [ arrowhead=normal];\n189 [label=\" par_inc <= 185532.71 \"] ;\n189 -> 211 [ arrowhead=normal];\n189 -> 212 [ arrowhead=normal];\n211  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  10 \n avg_Y = 0.19\navg_W = 0.4 \"];\n212  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  16 \n avg_Y = 1.54\navg_W = 0.38 \"];\n190 [label=\" par_sch <= 11 \"] ;\n190 -> 213 [ arrowhead=normal];\n190 -> 214 [ arrowhead=normal];\n213  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  16 \n avg_Y = 1.4\navg_W = 0.5 \"];\n214 [label=\" par_inc <= 476789.54 \"] ;\n214 -> 227 [ arrowhead=normal];\n214 -> 228 [ arrowhead=normal];\n227  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  7 \n avg_Y = 1.93\navg_W = 0.57 \"];\n228  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  6 \n avg_Y = 0.42\navg_W = 0.5 \"];\n172  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  9 \n avg_Y = 1.24\navg_W = 0.33 \"];\n138  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  17 \n avg_Y = 1.27\navg_W = 0.65 \"];\n100  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  13 \n avg_Y = 0.84\navg_W = 0.31 \"];\n68 [label=\" par_inc <= 341931.12 \"] ;\n68 -> 101 [ arrowhead=normal];\n68 -> 102 [ arrowhead=normal];\n101  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  29 \n avg_Y = 1.33\navg_W = 0.48 \"];\n102  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  53 \n avg_Y = 0.97\navg_W = 0.53 \"];\n14 [label=\" par_inc <= 350295.55 \"] ;\n14 -> 29 [ arrowhead=normal];\n14 -> 30 [ arrowhead=normal];\n29 [label=\" par_inc <= 220695.45 \"] ;\n29 -> 45 [ arrowhead=normal];\n29 -> 46 [ arrowhead=normal];\n45 [label=\" par_inc <= 101752.63 \"] ;\n45 -> 69 [ arrowhead=normal];\n45 -> 70 [ arrowhead=normal];\n69  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  24 \n avg_Y = 0.57\navg_W = 0.42 \"];\n70 [label=\" par_inc <= 166184.11 \"] ;\n70 -> 103 [ arrowhead=normal];\n70 -> 104 [ arrowhead=normal];\n103 [label=\" par_sch <= 16 \"] ;\n103 -> 139 [ arrowhead=normal];\n103 -> 140 [ arrowhead=normal];\n139  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  12 \n avg_Y = 0.61\navg_W = 0.25 \"];\n140  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  11 \n avg_Y = -0.1\navg_W = 0.45 \"];\n104  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  23 \n avg_Y = 0.24\navg_W = 0.61 \"];\n46 [label=\" par_sch <= 14 \"] ;\n46 -> 71 [ arrowhead=normal];\n46 -> 72 [ arrowhead=normal];\n71  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  16 \n avg_Y = 0.74\navg_W = 0.56 \"];\n72 [label=\" par_inc <= 269189.1 \"] ;\n72 -> 105 [ arrowhead=normal];\n72 -> 106 [ arrowhead=normal];\n105 [label=\" par_inc <= 235590.05 \"] ;\n105 -> 141 [ arrowhead=normal];\n105 -> 142 [ arrowhead=normal];\n141  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  6 \n avg_Y = 1.03\navg_W = 0.17 \"];\n142  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  12 \n avg_Y = 0.53\navg_W = 0.17 \"];\n106 [label=\" par_sch <= 16 \"] ;\n106 -> 143 [ arrowhead=normal];\n106 -> 144 [ arrowhead=normal];\n143  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  15 \n avg_Y = 0.46\navg_W = 0.33 \"];\n144  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  14 \n avg_Y = 0.11\navg_W = 0.5 \"];\n30 [label=\" par_sch <= 16 \"] ;\n30 -> 47 [ arrowhead=normal];\n30 -> 48 [ arrowhead=normal];\n47 [label=\" par_inc <= 963360.8 \"] ;\n47 -> 73 [ arrowhead=normal];\n47 -> 74 [ arrowhead=normal];\n73 [label=\" par_inc <= 543891.23 \"] ;\n73 -> 107 [ arrowhead=normal];\n73 -> 108 [ arrowhead=normal];\n107 [label=\" par_inc <= 421329.43 \"] ;\n107 -> 145 [ arrowhead=normal];\n107 -> 146 [ arrowhead=normal];\n145  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  10 \n avg_Y = 0.6\navg_W = 0.5 \"];\n146  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  31 \n avg_Y = 0.66\navg_W = 0.52 \"];\n108 [label=\" par_inc <= 743558.77 \"] ;\n108 -> 147 [ arrowhead=normal];\n108 -> 148 [ arrowhead=normal];\n147  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  18 \n avg_Y = -0.51\navg_W = 0.33 \"];\n148  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  21 \n avg_Y = -0.18\navg_W = 0.57 \"];\n74 [label=\" par_inc <= 1955607.2 \"] ;\n74 -> 109 [ arrowhead=normal];\n74 -> 110 [ arrowhead=normal];\n109 [label=\" par_inc <= 1279259.79 \"] ;\n109 -> 149 [ arrowhead=normal];\n109 -> 150 [ arrowhead=normal];\n149  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  20 \n avg_Y = 0.18\navg_W = 0.45 \"];\n150  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  17 \n avg_Y = 0.37\navg_W = 0.65 \"];\n110  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  24 \n avg_Y = 0.36\navg_W = 0.5 \"];\n48 [label=\" par_inc <= 431661.66 \"] ;\n48 -> 75 [ arrowhead=normal];\n48 -> 76 [ arrowhead=normal];\n75  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  10 \n avg_Y = 0.3\navg_W = 0.5 \"];\n76 [label=\" par_sch <= 18 \"] ;\n76 -> 111 [ arrowhead=normal];\n76 -> 112 [ arrowhead=normal];\n111 [label=\" par_inc <= 716724.88 \"] ;\n111 -> 151 [ arrowhead=normal];\n111 -> 152 [ arrowhead=normal];\n151  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  18 \n avg_Y = -0.24\navg_W = 0.5 \"];\n152  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  30 \n avg_Y = -0.16\navg_W = 0.47 \"];\n112 [label=\" par_inc <= 845316.99 \"] ;\n112 -> 153 [ arrowhead=normal];\n112 -> 154 [ arrowhead=normal];\n153  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  9 \n avg_Y = 0.93\navg_W = 0.33 \"];\n154  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\"size =  10 \n avg_Y = 1.33\navg_W = 0.2 \"];\n}","config":{"engine":"dot","options":null}},"evals":[],"jsHooks":[]}</script>
+</div>
+</div>
+</section>
+<section id="gooness-of-fit" class="level3">
+<h3 class="anchored" data-anchor-id="gooness-of-fit">Gooness of fit</h3>
+<p>We can test how good the fit is by running a regression of the individually estimated treatment effect on the average treatment effect and the predicted deviations. Given they are obtained with leave out approaches, they are not mechanically related. If the coeffiecient on both the mean and the differential is 1 it it indicates that the model captures heterogeneity well (and there is significant heterogeneity). If the point estimate on the differential is not significantly different from 0 it is either that the causal forest is not a good fit or there is no heterogeneity.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">test_calibration</span>(cf)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+Best linear fit using forest predictions (on held-out data)
+as well as the mean forest prediction as regressors, along
+with one-sided heteroskedasticity-robust (HC3) SEs:
+
+                               Estimate Std. Error t value  Pr(&gt;t)    
+mean.forest.prediction          1.04286    0.70215  1.4852 0.06876 .  
+differential.forest.prediction  0.99672    0.04122 24.1804 &lt; 2e-16 ***
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1</code></pre>
+</div>
+</div>
+</section>
+<section id="distribution-of-treatment-effects" class="level3">
+<h3 class="anchored" data-anchor-id="distribution-of-treatment-effects">Distribution of treatment effects</h3>
+<p>We can have a look at the distribution of the raw treatment effects</p>
+<div class="cell" data-hash="r_script_cache/html/unnamed-chunk-9_ead61f94f0b31a8f3cb56a7b1c032d1a">
+<div class="cell-output-display">
+<p><img src="r_script_files/figure-html/unnamed-chunk-9-1.png" class="img-fluid" style="width:80.0%"></p>
+</div>
+</div>
+<p>There is clearly substantial treatment effect heterogeneity as the CATE goes from less than -1 to more than 1. We can now try to characterize the this variation, but before that, we will have a look at the doubly robust estimates of the treatment effect.</p>
+</section>
+<section id="doubly-robust-treatment-effect" class="level3">
+<h3 class="anchored" data-anchor-id="doubly-robust-treatment-effect">Doubly robust treatment effect</h3>
+<p>We get this with the function <code>average_treatment_effect()</code>. It basically reweights the CATEs to give us a doubly robust estimate. It is not a big deal here, but it can make a real difference.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a> <span class="fu">average_treatment_effect</span>(cf)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>   estimate     std.err 
+-0.05486896  0.03961233 </code></pre>
+</div>
+</div>
+</section>
+<section id="describe-the-treatment-effect-heterogeneity" class="level3">
+<h3 class="anchored" data-anchor-id="describe-the-treatment-effect-heterogeneity">Describe the treatment effect heterogeneity</h3>
+<p>There are many things you can do to describe the heterogeneity. For example look athe covariates of those with large CATEs and compare them to those with small CATEs. Here I compare top 20% to bottom 20%.</p>
+<div class="cell">
+<div class="cell-output-display">
+
+<div class="tabwid"><style>.cl-413ed79a{}.cl-413be8aa{font-family:'Helvetica';font-size:11pt;font-weight:normal;font-style:normal;text-decoration:none;color:rgba(0, 0, 0, 1.00);background-color:transparent;}.cl-413d245e{margin:0;text-align:left;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);padding-bottom:5pt;padding-top:5pt;padding-left:5pt;padding-right:5pt;line-height: 1;background-color:transparent;}.cl-413d303e{width:0.75in;background-color:transparent;vertical-align: middle;border-bottom: 1.5pt solid rgba(102, 102, 102, 1.00);border-top: 1.5pt solid rgba(102, 102, 102, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-413d303f{width:0.75in;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-413d3048{width:0.75in;background-color:transparent;vertical-align: middle;border-bottom: 1.5pt solid rgba(102, 102, 102, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}</style><table data-quarto-disable-processing="true" class="cl-413ed79a"><thead><tr style="overflow-wrap:break-word;"><th class="cl-413d303e"><p class="cl-413d245e"><span class="cl-413be8aa"> </span></p></th><th colspan="2" class="cl-413d303e"><p class="cl-413d245e"><span class="cl-413be8aa">Fifth (N=2000)</span></p></th><th colspan="2" class="cl-413d303e"><p class="cl-413d245e"><span class="cl-413be8aa">First (N=2000)</span></p></th><th colspan="2" class="cl-413d303e"><p class="cl-413d245e"><span class="cl-413be8aa"> </span></p></th></tr><tr style="overflow-wrap:break-word;"><th class="cl-413d303e"><p class="cl-413d245e"><span class="cl-413be8aa"> </span></p></th><th class="cl-413d303e"><p class="cl-413d245e"><span class="cl-413be8aa">Mean</span></p></th><th class="cl-413d303e"><p class="cl-413d245e"><span class="cl-413be8aa">Std. Dev.</span></p></th><th class="cl-413d303e"><p class="cl-413d245e"><span class="cl-413be8aa">Mean </span></p></th><th class="cl-413d303e"><p class="cl-413d245e"><span class="cl-413be8aa">Std. Dev. </span></p></th><th class="cl-413d303e"><p class="cl-413d245e"><span class="cl-413be8aa">Diff. in Means</span></p></th><th class="cl-413d303e"><p class="cl-413d245e"><span class="cl-413be8aa">p</span></p></th></tr></thead><tbody><tr style="overflow-wrap:break-word;"><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">cate</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">1.46</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">0.50</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">-1.10</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">0.16</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">-2.56</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">0.00</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">female</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">0.51</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">0.50</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">0.54</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">0.50</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">0.02</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">0.12</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">par_inc</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">776250.73</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">908173.55</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">977720.45</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">1173766.91</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">201469.72</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">0.00</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">par_sch</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">14.06</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">3.23</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">15.66</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">2.26</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">1.60</span></p></td><td class="cl-413d303f"><p class="cl-413d245e"><span class="cl-413be8aa">0.00</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-413d3048"><p class="cl-413d245e"><span class="cl-413be8aa">native</span></p></td><td class="cl-413d3048"><p class="cl-413d245e"><span class="cl-413be8aa">0.93</span></p></td><td class="cl-413d3048"><p class="cl-413d245e"><span class="cl-413be8aa">0.26</span></p></td><td class="cl-413d3048"><p class="cl-413d245e"><span class="cl-413be8aa">0.00</span></p></td><td class="cl-413d3048"><p class="cl-413d245e"><span class="cl-413be8aa">0.06</span></p></td><td class="cl-413d3048"><p class="cl-413d245e"><span class="cl-413be8aa">-0.92</span></p></td><td class="cl-413d3048"><p class="cl-413d245e"><span class="cl-413be8aa">0.00</span></p></td></tr></tbody></table></div>
+</div>
+</div>
+</section>
+<section id="optimal-policy" class="level3">
+<h3 class="anchored" data-anchor-id="optimal-policy">Optimal policy</h3>
+<p>We can also use the CATEs to get the optimal policy. Who should get the treatment to maximize benefits?</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>Gamma.matrix <span class="ot">&lt;-</span> <span class="fu">double_robust_scores</span>(cf)</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>tree_full<span class="ot">&lt;-</span><span class="fu">policy_tree</span>(X, Gamma.matrix, <span class="at">depth =</span> <span class="dv">2</span>) </span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="co"># print policy</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(tree_full)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div class="grViz html-widget html-fill-item" id="htmlwidget-c273e131f235499acce9" style="width:100%;height:464px;"></div>
+<script type="application/json" data-for="htmlwidget-c273e131f235499acce9">{"x":{"diagram":"digraph nodes { \n node [shape=box] ;\n0 [label=\" female <= 0 \"] ;\n0 -> 1 [labeldistance=2.5, labelangle=45, headlabel=\"True\"];\n0 -> 2 [labeldistance=2.5, labelangle=-45, headlabel=\"False\"]\n1 [label=\" native <= 0 \"] ;\n1 -> 3  ;\n1 -> 4  ;\n3  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\" leaf node\n action = 1 \"];\n4  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\" leaf node\n action = 2 \"];\n2 [label=\" par_sch <= 13 \"] ;\n2 -> 5  ;\n2 -> 6  ;\n5  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\" leaf node\n action = 2 \"];\n6  [shape=box,style=filled,color=\".7 .3 1.0\" , label=\" leaf node\n action = 1 \"];\n}","config":{"engine":"dot","options":null}},"evals":[],"jsHooks":[]}</script>
+</div>
+</div>
+<p>So we would treat native females and males with low schooling.</p>
+</section>
+</section>
+</section>
+<section id="identification" class="level1">
+<h1>Identification</h1>
+<p>In the example above i implicitly assumed unconfoundedness. For example based on an RCT. We can also use the approach with quasi-experimental methods. A basic idea is to first residualize treatment and outcomes and then use the residualized variables in a causal forest.</p>
+<section id="mimicking-a-two-way-fe-did-approach" class="level2">
+<h2 class="anchored" data-anchor-id="mimicking-a-two-way-fe-did-approach">Mimicking a two-way FE DiD approach</h2>
+<p>We add some fixed effects to the data frame (that do not make a difference, but just as an illustration). So here let us say we have some state and year fixed effects:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Create FE</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>df<span class="sc">$</span>fe_state<span class="ot">&lt;-</span><span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">50</span>,<span class="at">replace =</span> <span class="cn">TRUE</span>, <span class="fu">nrow</span>(df))</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>df<span class="sc">$</span>fe_year<span class="ot">&lt;-</span><span class="fu">sample</span>(<span class="dv">2010</span><span class="sc">:</span><span class="dv">2020</span>,<span class="at">replace =</span> <span class="cn">TRUE</span>, <span class="fu">nrow</span>(df))</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Make them dummies</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>df_dummies<span class="ot">&lt;-</span><span class="fu">dummy_cols</span>(df,<span class="at">select_columns=</span><span class="st">"fe_state"</span> )</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>df_dummies<span class="ot">&lt;-</span><span class="fu">dummy_cols</span>(df_dummies,<span class="at">select_columns=</span><span class="st">"fe_year"</span> )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>We now first residualize the variables</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb18"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>X_orth <span class="ot">=</span> <span class="fu">as.matrix</span>(df_dummies<span class="sc">%&gt;%</span><span class="fu">select</span>(<span class="fu">starts_with</span>(<span class="st">"fe_"</span>),<span class="sc">-</span>fe_state,<span class="sc">-</span>fe_year))</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>Y.forest <span class="ot">=</span> <span class="fu">regression_forest</span>(X_orth, y)</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>Y.hat <span class="ot">=</span> <span class="fu">predict</span>(Y.forest )<span class="sc">$</span>predictions</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>W.forest <span class="ot">=</span> <span class="fu">regression_forest</span>(X_orth, W)</span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>W.hat <span class="ot">=</span> <span class="fu">predict</span>(W.forest )<span class="sc">$</span>predictions</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>And we then estimate the causal forest and do everything as above, except that we feed in the predictions.</p>
+<div class="cell" data-hash="r_script_cache/html/unnamed-chunk-15_e25e26b08e3800c58e8a8bdf3633b4e7">
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>cf<span class="ot">&lt;-</span><span class="fu">causal_forest</span>(<span class="at">X=</span>X,<span class="at">Y=</span>y,<span class="at">W=</span>W,<span class="at">Y.hat =</span> Y.hat, <span class="at">W.hat =</span> W.hat)</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a> <span class="fu">average_treatment_effect</span>(cf)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>   estimate     std.err 
+-0.05407066  0.04020501 </code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="things-to-consider" class="level1">
+<h1>Things to consider</h1>
+<ul>
+<li><p>I was silent about common support, but ideally you want to show some sort of common support of treated and control across all values of all variables.</p></li>
+<li><p>Tuning: there are lots of parameters that can be adjusted and set manually. Like the number of trees. The stopping rules etc. We can explicitly state that we want to tune them (cross validation) and have a look at the settings. The settings are stored in tuning.output</p></li>
+</ul>
+<div class="cell" data-hash="r_script_cache/html/unnamed-chunk-16_65bfa692720f009ac7168ecfcaf1c3eb">
+<div class="sourceCode cell-code" id="cb21"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>cf<span class="ot">&lt;-</span><span class="fu">causal_forest</span>(<span class="at">X=</span>X,<span class="at">Y=</span>y,<span class="at">W=</span>W,<span class="at">Y.hat =</span> Y.hat, <span class="at">W.hat =</span> W.hat,<span class="at">tune.parameters =</span> <span class="st">"all"</span>,)</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>cf<span class="sc">$</span>tuning.output<span class="sc">$</span>params       </span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>     sample.fraction                 mtry        min.node.size 
+           0.4047292            5.0000000            9.0000000 
+    honesty.fraction honesty.prune.leaves                alpha 
+           0.7405526            1.0000000            0.1862235 
+   imbalance.penalty 
+           0.5164645 </code></pre>
+</div>
+</div>
+<ul>
+<li><p>In the residualization above I use a regression forest on a lot of dummies. In principle you could use OLS (but avoid perfect predictions). It also worth noting that dummies are very inefficient in these forests, because they do not include a lot of information considering how many values they add. It might be better to use some kind of sufficient representation (like adding means of all covariates by the levels of the fixed effect).</p></li>
+<li><p>Where to find more: Most of the above is from the Susan Athey lectures here https://www.aeaweb.org/conference/cont-ed/2018-webcasts where she also covers IV estimation.</p></li>
+</ul>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button', {
+    text: function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+  });
+  clipboard.on('success', function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  });
+  function tippyHover(el, contentFn) {
+    const config = {
+      allowHTML: true,
+      content: contentFn,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start'
+    };
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      return note.innerHTML;
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+
+
+
+</body></html>
